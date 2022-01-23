@@ -8,9 +8,6 @@ import "./ABDKMath64x64.sol";
 contract SpliterTeam is Ownable{
   uint[3] setCategoryBalance;
   uint[3] setCategoryAccumalated;
-
-  uint periodVestingTime;
-  uint totalReleased;
    
   struct TEMPLATE {
     address beneficiary;
@@ -99,7 +96,7 @@ contract SpliterTeam is Ownable{
 
   function _checkAmount(uint _check, uint _amount) private pure {
       if(_check > _amount) {
-        revert("Error: checkAmount exceeds Destination's balance");
+        revert("Error: CheckAmount exceeds destination's balance");
       }
 
   }
