@@ -15,10 +15,11 @@ contract Seed_Sale is Ownable {
 
   mapping(address => uint) private _balance;
 
-  int128 public constant dailyVesting = 184467440700000000;
-  uint public constant min = 1*10**17 wei;
-  uint public constant max = 200*10**18 wei;
-  uint public constant rate = 10000;    
+  int128 public constant dailyVesting = 184467440700000000; //1% converted to fixed64x64
+  uint public constant rate = 7440;
+  uint public constant min = 1*10**17 wei; 
+  uint public constant max = 5*10**18 wei;
+  uint public constant goal = 200*10**19 wei;
   uint public lastDayToBuy;
   address immutable val;
   address public constant burnAddress = 0x000000000000000000000000000000000000dEaD;
@@ -34,7 +35,7 @@ contract Seed_Sale is Ownable {
 
 
   receive() external payable {
-    require(address(this).balance != max, "SEED_SALE: We did it :)");
+    require(address(this).balance < goal, "SEED_SALE: We did it :)");
     require(block.timestamp <= lastDayToBuy, "SEED_SALE: Error over date to buy.");
     require(msg.value >= min && msg.value <= max, "SEED_SALE: Error in value receiving");
     _balance[msg.sender] += msg.value * rate;
