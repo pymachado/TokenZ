@@ -89,9 +89,8 @@ contract SpliterTeam is Ownable{
   }
 
   function daysPassed(uint startDate) private view returns(uint) {
-    require(startDate <= block.timestamp);
-    require(540 - ((block.timestamp - startDate) * 1 days) > 0, "Time is over.");
-    return (block.timestamp - startDate) * 1 days;
+    require(540 - ((block.timestamp - startDate) / 1 days) > 0, "Time is over.");
+    return (block.timestamp - startDate) / 1 days;
   }
 
   function _checkAmount(uint _check, uint _amount) private pure {
