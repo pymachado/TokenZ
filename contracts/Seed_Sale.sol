@@ -19,7 +19,7 @@ contract Seed_Sale is Ownable {
   uint public constant rate = 7440;
   uint public constant min = 1*10**17 wei; 
   uint public constant max = 5*10**18 wei;
-  uint public constant goal = 200*10**19 wei;
+  uint public constant goal = 200*10**18 wei;
   uint public lastDayToBuy;
   address immutable val;
   address public constant burnAddress = 0x000000000000000000000000000000000000dEaD;
