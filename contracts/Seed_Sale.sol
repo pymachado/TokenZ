@@ -4,80 +4,106 @@ pragma solidity >=0.8.0 <0.9.0;
 /**
   @author Pedro Machado
   @title SEED_SALE
-  @notice Contract designing to launch a private sale ERC20 token.
+  @notice Contract designing to launch an ERC20 private-sale-token with vesting time. 
  */
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./ABDKMath64x64.sol";
 
 contract Seed_Sale is Ownable {
 
-  mapping(address => uint) private _balance;
+  struct Investor {
+    uint _allocation;
+    uint _released;
+    uint64 _lastDateClaimed;
+  }
 
-  int128 public constant dailyVesting = 184467440700000000; //1% converted to fixed64x64
-  uint public constant rate = 7440;
-  uint public constant min = 1*10**17 wei; 
+  mapping (address => Investor) private _investor;
+
+
+  uint public constant min = 2*10**18 wei; 
   uint public constant max = 5*10**18 wei;
-  uint public constant goal = 200*10**18 wei;
-  uint public lastDayToBuy;
-  address immutable val;
+  uint public goal;
+  uint64 public startDateToBuy; //UNIX format
+  uint64 public lastDayToBuy; //UNIX format
+  uint16 public constant rate = 1000; 
+  uint8 vestingEpoch; //sampling period
+  address immutable erc20;
   address public constant burnAddress = 0x000000000000000000000000000000000000dEaD;
-  IERC20 VAL;  
-
+  
   event CLAIMED(address claimer, uint amount, uint date);
   event RECEIVED(address claimer, uint amountBNB, uint amountVAL);
 
-  constructor(address _val) {
-    val = _val;
-    lastDayToBuy = block.timestamp + 1 weeks;
+  constructor(address _token, uint64 startDate, uint64 endDate, uint8 vestingTime) {
+    //address erc20
+    erc20 = _token;
+    //Private duration
+    startDateToBuy = startDate;
+    lastDayToBuy = endDate;
+    //Vesting time
+    vestingEpoch = vestingTime;
   }
 
 
   receive() external payable {
-    require(address(this).balance < goal, "SEED_SALE: We did it :)");
-    require(block.timestamp <= lastDayToBuy, "SEED_SALE: Error over date to buy.");
+    require(goal + msg.value <= address(this).balance , "SEED_SALE: We did it :)");
+    require(block.timestamp >= startDateToBuy && block.timestamp <= lastDayToBuy, "SEED_SALE: Error over date to buy.");
     require(msg.value >= min && msg.value <= max, "SEED_SALE: Error in value receiving");
-    _balance[msg.sender] += msg.value * rate;
+    _investor[msg.sender]._allocation += msg.value * rate;
+    _investor[msg.sender]._lastDateClaimed = lastDayToBuy; //lastDateClaimed is inicialized at lastDayToBuy;
+    goal += msg.value;
     emit RECEIVED(msg.sender, msg.value, msg.value * rate);
   }
 
-  function claim() external {
-    require(_balance[msg.sender] !=0, "SEED_SALE: You don't have funds");
-    require(daysPassed(lastDayToBuy) >= 30, "SEED_SALE: You have to wait at least one vesting period.");
-    uint validDaysToPay = daysPassed(lastDayToBuy) - (daysPassed(lastDayToBuy) % 30);
-    uint valueToPay = ABDKMath64x64.mulu(dailyVesting, _balance[msg.sender]) * validDaysToPay;
-    _balance[msg.sender] -= valueToPay;
-    VAL = IERC20(val);
-    VAL.transfer(msg.sender, valueToPay);
-    emit CLAIMED(msg.sender, valueToPay, block.timestamp);
+  function claim() external { 
+    require(pendingToRelease(msg.sender) != 0, 'There is nothing to release.');
+    IERC20 TOKEN;
+    TOKEN = IERC20(erc20);
+    TOKEN.transfer(msg.sender, pendingToRelease(msg.sender));
+    _investor[msg.sender]._lastDateClaimed = uint64(block.timestamp);
+    _investor[msg.sender]._released += pendingToRelease(msg.sender);
+    emit CLAIMED(msg.sender, pendingToRelease(msg.sender), block.timestamp);
+
   }
 
-  function withdraw(uint amount) external onlyOwner {
-    require(block.timestamp >= lastDayToBuy + 1 days, "SEED_SALE: error");
-    require(amount <= address(this).balance);
-    payable(owner()).transfer(amount);
+  function pendingToRelease(address claimer) public view returns(uint) {
+    if (_investor[claimer]._allocation - released(claimer) != 0) {
+      uint epoch = duration(claimer) / vestingEpoch;
+      return calculeToRelease(claimer, epoch);
+    }
+    else {
+      return 0;
+    }
   }
 
-  function burnRemaining() external onlyOwner {
-    require(block.timestamp >= lastDayToBuy + 1 days, "SEED_SALE: error");
-    require(VAL.balanceOf(address(this)) != 0, "SEED_SALE: error");
-    VAL.transfer(burnAddress, VAL.balanceOf(address(this)));
-    emit CLAIMED(burnAddress, VAL.balanceOf(address(this)), block.timestamp);
+  function totalAllocation() public view returns(uint) {
+    IERC20 TOKEN;
+    TOKEN = IERC20(erc20);
+    return TOKEN.balanceOf(address(this));
   }
 
-  function pendingToClaimOf(address claimer) external view returns(uint) {
-    return _balance[claimer];
+  function toRelease(address claimer) public view returns(uint) {
+    return _investor[claimer]._allocation - released(claimer);
   }
 
-  function releasedOf(address claimer) external view returns(uint) {
-    return ABDKMath64x64.mulu(dailyVesting, _balance[claimer]) * daysPassed(lastDayToBuy);
+  function released(address claimer) public view returns(uint) {
+    return _investor[claimer]._released;
   }
 
-  function daysPassed(uint startDate) private view returns(uint) {
-    require(90 - ((block.timestamp - startDate) / 1 days) > 0, "Time is over.");
-    return (block.timestamp - startDate) / 1 days;
+  function vestingAmount(address claimer) public view returns(uint) {
+    return (vestingPorcentage() * _investor[claimer]._allocation) / 100;  
   }
 
+  function vestingPorcentage() public pure returns(uint8) {
+    return 25;
+  }
+
+  function calculeToRelease(address claimer, uint epoch) private view returns(uint) {
+    return vestingAmount(claimer) * epoch - released(claimer);
+  }
+
+  function duration(address claimer) private view returns (uint) {
+    return (block.timestamp - _investor[claimer]._lastDateClaimed) / 1 minutes;
+  }
 
 }
