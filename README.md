@@ -1,6 +1,4 @@
-# Valeria Token
-
-# Done Tasks
+# TokenZ
 
 1-Put a variable called frozenTime. It indicates time for lock an address if it exceed the maximium daily total transfer per account. 
 
